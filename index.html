@@ -1700,13 +1700,34 @@ function initStaff() {
       el.innerHTML = '<button class="back" data-go-list>‹ All requests</button><div class="d-head"><div><h1 class="d-ref">' + esc(ref) + '</h1>' +
         (row ? '<div class="d-sub"><b>' + esc(row.company) + '</b> · ' + esc(row.category) + '</div>' : '') + '</div></div><div class="card"><span class="spin"></span> Loading request…</div>';
     }
-    api('get', { ref: ref }).then(function (r) { S.detail[ref] = r; if (currentRef() === ref) renderDetail(r); })
-      .catch(function (e) { toast(e.message); });
+    api('get', { ref: ref }).then(function (r) {
+      S.detail[ref] = r;
+      if (currentRef() === ref) renderDetail(r);
+    }).catch(function (e) {
+      if (currentRef() !== ref) return;
+      if (S.detail[ref]) { toast(e.message); return; }
+      var card = $('#v-detail .card');
+      if (card) card.innerHTML = '<b>This request could not be opened.</b><p class="muted" style="margin:6px 0 12px">' + esc(e.message) +
+        '</p><button class="btn sm" data-retry>Try again</button>';
+    });
   }
   function currentRef() { var m = location.hash.match(/^#\/staff\/r\/([A-Z0-9-]+)/i); return m ? m[1].toUpperCase() : ''; }
 
   function renderDetail(d) {
+    try { drawDetail(d); }
+    catch (err) {
+      console.error(err);
+      var card = $('#v-detail .card');
+      var msg = '<b>This request could not be displayed.</b><p class="muted" style="margin:6px 0 12px">' + esc(err.message) + '</p><button class="btn sm" data-retry>Try again</button>';
+      if (card) card.innerHTML = msg; else $('#v-detail').insertAdjacentHTML('beforeend', '<div class="card">' + msg + '</div>');
+    }
+  }
+
+  function drawDetail(d) {
     var r = d.request;
+    ['company', 'contact', 'email', 'phone', 'product', 'category', 'status', 'approval', 'assigned', 'generalNotes', 'notes', 'required']
+      .forEach(function (k) { r[k] = r[k] == null ? '' : String(r[k]); });
+    d.details = d.details || []; d.files = d.files || []; d.notes = d.notes || []; d.activity = d.activity || []; d.approvals = d.approvals || [];
     var el = $('#v-detail');
     var custFiles = d.files.filter(function (f) { return f.kind === 'logo' || f.kind === 'product'; });
     var staffFiles = d.files.filter(function (f) { return f.kind !== 'logo' && f.kind !== 'product'; });
@@ -1806,6 +1827,7 @@ function initStaff() {
   /* ---------- detail actions ---------- */
   $('#v-detail').addEventListener('click', function (e) {
     if (e.target.closest('[data-go-list]')) { location.hash = '#/staff'; return; }
+    if (e.target.closest('[data-retry]')) { var rr = currentRef(); delete S.detail[rr]; openDetail(rr); return; }
     var fa = e.target.closest('[data-fa]');
     if (fa) { fileAct(fa.dataset.fa, fa.closest('[data-file]').dataset.file); return; }
     var b = e.target.closest('[data-act]'); if (!b) return;
